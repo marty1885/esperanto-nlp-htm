@@ -16,12 +16,12 @@ constexpr int LEN_PER_TOKEN = 24;
 constexpr int INPUT_SIZE = TOKEN_TYPE_NUM*LEN_PER_TOKEN;
 constexpr int TP_DEPTH = 1024;
 
-std::vector<std::string> tokens = {".", "a", "b", "c", "ĉ", "d", "e", "f", "g", "ĝ", "h", "ĥ", "i", "j",
+std::vector<std::string> lower_esperanto_chars = {".", "a", "b", "c", "ĉ", "d", "e", "f", "g", "ĝ", "h", "ĥ", "i", "j",
         "ĵ", "k", "l", "m", "n", "o", "p", "r", "s", "ŝ", "t", "u", "ŭ", "v", "z", " "};
 
 std::string characterFromIndex(int index)
 {
-	return tokens[index];
+	return lower_esperanto_chars[index];
 }
 
 xt::xarray<bool> encode(int token)
@@ -38,9 +38,12 @@ xt::xarray<float> softmax(const xt::xarray<float>& x)
 	return b/xt::sum(b);
 }
 
-xt::xarray<float> toprop(const xt::xarray<float>& x)
+xt::xarray<float> linearprop(const xt::xarray<float>& x)
 {
-	return x/xt::sum(x);
+	auto s = xt::sum(x);
+	if(s[0] == 0)
+		return xt::zeros<float>(x.shape());
+	return x/s;
 }
 
 xt::xarray<float> categroize(const xt::xarray<bool>& in)
@@ -58,6 +61,22 @@ xt::xarray<int> loadDataset(std::string path)
 	xt::xarray<int> dataset = xt::load_npy<int>(path);
 	return dataset;
 }
+
+size_t sampleFromDistribution(const xt::xarray<float>& dist)
+{
+	//return xt::argmax(dist)[0];
+	float v = xt::random::rand<float>({1})[0];
+	float s = 0;
+	size_t index = 0;
+	for(auto p : dist) {
+		s += p;
+		if(v <= s)
+			return index;
+		index++;
+	}
+	return 0;
+}
+
 
 struct Model
 {
@@ -88,6 +107,30 @@ struct Model
 		return tm.compute(x, learn);
 	}
 
+	size_t predictNextToken(size_t currentToken)
+	{
+		auto res = predict(encode(currentToken));
+		auto prop = xt::eval(softmax(categroize(res)));
+
+		if(xt::sum(prop)[0] == 0)
+			return -1;
+		return sampleFromDistribution(prop);
+	}
+
+	std::vector<size_t> continousPredict(size_t init_token, int num = -1)
+	{
+		std::vector<size_t> res;
+		size_t token = init_token;
+		for(int i=0;i<num or i<0; i++) {
+			token = predictNextToken(token);
+			res.push_back(token);
+
+			if(token == -1)
+				break;
+		}
+		return res;
+	}
+
 	void reset()
 	{
 		tm.reset();
@@ -96,26 +139,22 @@ struct Model
 	TM tm;
 };
 
+inline void ptint(std::vector<size_t> tokens)
+{
+	for(auto token : tokens) {
+		if(token == -1) {
+			std::cout << "<NO PREDICTION>\n";
+			break;
+		}
+
+		std::cout << characterFromIndex(token);
+	}
+}
+
 auto noise(float p = 0.01f)
 {
 	static std::mt19937 eng;
 	return xt::random::rand<float>({TOKEN_TYPE_NUM, LEN_PER_TOKEN}, 0,1, eng) < p;
-}
-
-
-size_t sampleFromDistribution(const xt::xarray<float>& dist)
-{
-	//return xt::argmax(dist)[0];
-	float v = xt::random::rand<float>({1})[0];
-	float s = 0;
-	size_t index = 0;
-	for(auto p : dist) {
-		s += p;
-		if(v <= s)
-			return index;
-		index++;
-	}
-	return 0;
 }
 
 int main()
@@ -124,38 +163,28 @@ int main()
 	Model model;
 
 	std::cout << "traning temporal memory..." << std::endl;
-	for(int i=0;i<10;i++) {
+	for(int i=0;i<5;i++) {
 		for(auto token : dataset) {
 			//Add some noise to break symmetry
 			model.train(encode(token) ^ noise(0.005));
-			if (token == 0)
-				model.reset();
+			//if (token == 0)
+			//	model.reset();
 		}
 		model.reset();
 		std::cout << i << "\r" << std::flush;
 	}
 	std::cout << "\n";
 
+
+
 	std::cout << "Genetare random text....\n";
+	auto tokens = model.continousPredict(29, 400); //29 = ' '
+	ptint(tokens);
 	model.reset();
-	int token = 29;
-	for(int i=0;i<400;i++) {
-		auto res = model.predict(encode(token));
-		auto prop = toprop(categroize(res));
 
-		if(xt::sum(res)[0] == 0) {
-			std::cout << "<NO PREDICTION>\n";
-			break;
-		}
 
-		token = sampleFromDistribution(prop);
-		std::cout << characterFromIndex(token);
-		if(token == 0)
-			break;
-	}
 
 	std::cout << "\n\nFinishing a sentence....\n";
-	model.reset();
 	auto test = loadDataset("test.npy");
 	xt::xarray<bool> res;
 	for(auto token : test) {
@@ -163,45 +192,22 @@ int main()
 		res = model.predict(encode(token));
 	}
 
-	token = sampleFromDistribution(categroize(res));
+	int token = sampleFromDistribution(softmax(categroize(res)));
 	std::cout << characterFromIndex(token);
 
-	for(int i=0;i<40 && token != 0;i++) {
-		auto res = model.predict(encode(token));
-		token = sampleFromDistribution(categroize(res));
-		std::cout << characterFromIndex(token);
-
-		if(xt::sum(res)[0] == 0) {
-			std::cout << "<NO PREDICTION>\n";
-			break;
-		}
-	}
-
+	tokens = model.continousPredict(token, 40);
+	ptint(tokens);
+	model.reset();
 	std::cout << "\n";
 
 
-	for(int i=0;i<TOKEN_TYPE_NUM;i++) {
-		int token = i;
-		std::cout << "\n\nGenerate random text started by " << characterFromIndex(i) << ":\n";
-		xt::xarray<bool> res = encode(token);
-		if(token < 0 or token >= TOKEN_TYPE_NUM)
-			continue;
-		model.reset();
-		for(int i=0;i<80;i++) {
-			std::cout << characterFromIndex(token);
-			res = model.predict(encode(token));
-			auto prop = toprop(categroize(res));
 
-			token = sampleFromDistribution(prop);
-			if(xt::sum(res)[0] == 0) {
-				std::cout << "<NO PREDICTION>\n";
-				break;
-			}
-			else if(token == 0) {
-				std::cout << characterFromIndex(token);
-				break;
-			}
-		}
+	for(int token=0;token<TOKEN_TYPE_NUM;token++) {
+		std::cout << "\n\nGenerate random text started by " << characterFromIndex(token) << ":\n";
+		std::cout << characterFromIndex(token);
+		auto tokens = model.continousPredict(token, 40);
+		ptint(tokens);
+		model.reset();
 	}
 	
 	std::cout << std::endl;

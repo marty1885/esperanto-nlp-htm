@@ -13,7 +13,7 @@
 using namespace HTM;
 
 constexpr int TOKEN_TYPE_NUM = 30;
-constexpr int LEN_PER_TOKEN = 24;
+constexpr int LEN_PER_TOKEN = 16;
 constexpr int INPUT_SIZE = TOKEN_TYPE_NUM*LEN_PER_TOKEN;
 constexpr int TP_DEPTH = 1024;
 
@@ -147,7 +147,7 @@ inline void ptint(std::vector<size_t> tokens, bool init_upper = false)
 	}
 }
 
-auto noise(xt::xarray<float>::shape_type shape, float p = 0.01f)
+xt::xarray<bool> noise(xt::xarray<float>::shape_type shape, float p = 0.01f)
 {
 	static std::mt19937 eng;
 	return xt::random::rand<float>(shape, 0,1, eng) < p;
@@ -162,7 +162,7 @@ int main()
 	for(int i=0;i<20;i++) {
 		for(auto token : dataset) {
 			//Add some noise to break symmetry
-			model.train(encode(token) ^ noise({TOKEN_TYPE_NUM*LEN_PER_TOKEN}, 0.005));
+			model.train(encode(token) ^ noise({TOKEN_TYPE_NUM*LEN_PER_TOKEN}, 0.0005));
 			//if (token == 0)
 			//	model.reset();
 		}

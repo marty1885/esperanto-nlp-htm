@@ -18,7 +18,7 @@ def charToToken(ch):
     c = esperantoToLower(ch)
     base_len = len(esperanto_low_alphabet)+1
     additional_chars = [' ']
-    if c == '.':
+    if c == '.' or c == '?':
         return 0 #. is a special token
     elif c in esperanto_low_alphabet:
         return esperanto_low_alphabet.index(c) + 1

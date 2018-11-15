@@ -19,11 +19,14 @@ constexpr int TP_DEPTH = 1024;
 
 std::vector<std::string> lower_esperanto_chars = {".", "a", "b", "c", "ĉ", "d", "e", "f", "g", "ĝ", "h", "ĥ", "i", "j",
         "ĵ", "k", "l", "m", "n", "o", "p", "r", "s", "ŝ", "t", "u", "ŭ", "v", "z", " "};
+std::vector<std::string> upper_esperanto_chars = {".", "A", "B", "C", "Ĉ", "D", "E", "F", "G", "Ĝ", "H", "Ĥ", "I", "J",
+	"Ĵ", "K", "L", "M", "N", "O", "P", "R", "S", "Ŝ", "T", "U", "Ŭ", "V", "Z", " "};
 
-std::string characterFromIndex(int index)
+std::string characterFromIndex(int index, bool upper=false)
 {
-	return lower_esperanto_chars[index];
-}
+	if(upper)
+		return upper_esperanto_chars[index];
+	return lower_esperanto_chars[index];}
 
 xt::xarray<bool> encode(int token)
 {
@@ -127,22 +130,27 @@ struct Model
 	TemporalMemory tm;
 };
 
-inline void ptint(std::vector<size_t> tokens)
+inline void ptint(std::vector<size_t> tokens, bool init_upper = false)
 {
+	bool upper = init_upper;
 	for(auto token : tokens) {
 		if(token == -1) {
 			std::cout << "<NO PREDICTION>\n";
 			break;
 		}
 
-		std::cout << characterFromIndex(token);
+		std::cout << characterFromIndex(token, upper);
+		if(token != 29 and upper == true)
+			upper = false;
+		if(token == 0)
+			upper = true;
 	}
 }
 
-auto noise(float p = 0.01f)
+auto noise(xt::xarray<float>::shape_type shape, float p = 0.01f)
 {
 	static std::mt19937 eng;
-	return xt::random::rand<float>({TOKEN_TYPE_NUM*LEN_PER_TOKEN}, 0,1, eng) < p;
+	return xt::random::rand<float>(shape, 0,1, eng) < p;
 }
 
 int main()
@@ -151,10 +159,10 @@ int main()
 	Model model;
 
 	std::cout << "traning temporal memory..." << std::endl;
-	for(int i=0;i<5;i++) {
+	for(int i=0;i<20;i++) {
 		for(auto token : dataset) {
 			//Add some noise to break symmetry
-			model.train(encode(token) ^ noise(0.005));
+			model.train(encode(token) ^ noise({TOKEN_TYPE_NUM*LEN_PER_TOKEN}, 0.005));
 			//if (token == 0)
 			//	model.reset();
 		}
@@ -167,7 +175,7 @@ int main()
 
 	std::cout << "Genetare random text....\n";
 	auto tokens = model.continousPredict(29, 400); //29 = ' '
-	ptint(tokens);
+	ptint(tokens, true);
 	model.reset();
 
 
@@ -192,7 +200,7 @@ int main()
 
 	for(int token=0;token<TOKEN_TYPE_NUM;token++) {
 		std::cout << "\n\nGenerate random text started by " << characterFromIndex(token) << ":\n";
-		std::cout << characterFromIndex(token);
+		std::cout << characterFromIndex(token, true);
 		auto tokens = model.continousPredict(token, 40);
 		ptint(tokens);
 		model.reset();

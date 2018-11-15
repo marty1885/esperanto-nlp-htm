@@ -9,7 +9,8 @@
 #include <xtensor/xsort.hpp>
 #include <xtensor/xrandom.hpp>
 
-#include "htmhelper.hpp"
+#include "HTMHelper.hpp"
+using namespace HTM;
 
 constexpr int TOKEN_TYPE_NUM = 30;
 constexpr int LEN_PER_TOKEN = 24;
@@ -26,16 +27,8 @@ std::string characterFromIndex(int index)
 
 xt::xarray<bool> encode(int token)
 {
-	xt::xarray<bool> base = xt::zeros<bool>({TOKEN_TYPE_NUM, LEN_PER_TOKEN});
-	auto v = xt::view(base, token);
-	v = true;
-	return base;
-}
-
-xt::xarray<float> softmax(const xt::xarray<float>& x)
-{
-	auto b = xt::eval(xt::exp(x-xt::amax(x)));
-	return b/xt::sum(b);
+	CategoryEncoder encoder(TOKEN_TYPE_NUM, LEN_PER_TOKEN);
+	return encoder(token);
 }
 
 xt::xarray<float> linearprop(const xt::xarray<float>& x)
@@ -48,12 +41,7 @@ xt::xarray<float> linearprop(const xt::xarray<float>& x)
 
 xt::xarray<float> categroize(const xt::xarray<bool>& in)
 {
-	xt::xarray<float> res = xt::zeros<float>({TOKEN_TYPE_NUM});
-	assert(res.size()*LEN_PER_TOKEN == in.size());
-	for(size_t i=0;i<in.size();i++)
-		res[i/LEN_PER_TOKEN] += (float)in[i];
-	//res /= LEN_PER_TOKEN;
-	return res;
+	return categroize(TOKEN_TYPE_NUM, LEN_PER_TOKEN, in, false);
 }
 
 xt::xarray<int> loadDataset(std::string path)
@@ -80,7 +68,7 @@ size_t sampleFromDistribution(const xt::xarray<float>& dist)
 
 struct Model
 {
-	Model(): tm({TOKEN_TYPE_NUM, LEN_PER_TOKEN}, TP_DEPTH, 255, 8192)
+	Model(): tm({TOKEN_TYPE_NUM*LEN_PER_TOKEN}, TP_DEPTH, 255, 8192)
 	{
 		tm->setMinThreshold(LEN_PER_TOKEN*0.35f+1);
 		tm->setActivationThreshold(LEN_PER_TOKEN*0.25f);
@@ -136,7 +124,7 @@ struct Model
 		tm.reset();
 	}
 
-	TM tm;
+	TemporalMemory tm;
 };
 
 inline void ptint(std::vector<size_t> tokens)
@@ -154,7 +142,7 @@ inline void ptint(std::vector<size_t> tokens)
 auto noise(float p = 0.01f)
 {
 	static std::mt19937 eng;
-	return xt::random::rand<float>({TOKEN_TYPE_NUM, LEN_PER_TOKEN}, 0,1, eng) < p;
+	return xt::random::rand<float>({TOKEN_TYPE_NUM*LEN_PER_TOKEN}, 0,1, eng) < p;
 }
 
 int main()

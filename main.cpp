@@ -8,6 +8,7 @@
 #include <xtensor/xview.hpp>
 #include <xtensor/xsort.hpp>
 #include <xtensor/xrandom.hpp>
+#include <xtensor/xindex_view.hpp>
 
 #include "HTMHelper.hpp"
 using namespace HTM;
@@ -150,7 +151,7 @@ inline void ptint(std::vector<size_t> tokens, bool init_upper = false)
 xt::xarray<bool> noise(xt::xarray<float>::shape_type shape, float p = 0.01f)
 {
 	static std::mt19937 eng;
-	return xt::random::rand<float>(shape, 0,1, eng) < p;
+	return (xt::random::rand<float>(shape, 0,1, eng) < p) && (xt::random::rand<float>(shape, 0,1, eng) < 0.5);
 }
 
 int main()

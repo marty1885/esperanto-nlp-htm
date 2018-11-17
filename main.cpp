@@ -37,8 +37,8 @@ xt::xarray<bool> encode(int token)
 
 xt::xarray<float> linearprop(const xt::xarray<float>& x)
 {
-	auto s = xt::sum(x);
-	if(s[0] == 0)
+	float s = xt::sum(x)[0];
+	if(s == 0)
 		return xt::zeros<float>(x.shape());
 	return x/s;
 }
@@ -74,7 +74,7 @@ struct Model
 {
 	Model(): tm({TOKEN_TYPE_NUM*LEN_PER_TOKEN}, TP_DEPTH, 255, 8192)
 	{
-		tm->setMinThreshold(LEN_PER_TOKEN*0.35f+1);
+		tm->setMinThreshold(LEN_PER_TOKEN*0.65f+1);
 		tm->setActivationThreshold(LEN_PER_TOKEN*0.25f);
 		tm->setMaxNewSynapseCount(128);
 		tm->setPermanenceIncrement(0.030);
@@ -163,7 +163,7 @@ int main()
 	for(int i=0;i<20;i++) {
 		for(auto token : dataset) {
 			//Add some noise to break symmetry
-			model.train(encode(token) ^ noise({TOKEN_TYPE_NUM*LEN_PER_TOKEN}, 0.0005));
+			model.train(encode(token)/* ^ noise({TOKEN_TYPE_NUM*LEN_PER_TOKEN}, 0.0005)*/);
 			//if (token == 0)
 			//	model.reset();
 		}
